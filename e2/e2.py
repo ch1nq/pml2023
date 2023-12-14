@@ -30,13 +30,12 @@ def rejection_sample(q_density, x_func, k=1, n_samples=1000) -> np.ndarray:
 
 
 # Self-normalized importance sampling
-def importance_sample(q_density, n_samples=1000):
-    xs = np.random.uniform(-3, 3, size=n_samples)
-    q_samples = q_density(xs)
+def importance_sample(q: scipy.stats.norm, n_samples=1000):
+    xs = q.rvs(size=n_samples)
+    q_samples = q.pdf(xs)
     p_samples = p_density(xs)
-    # norm_ratio = np.mean(p_samples / q_samples)
     w = (p_samples / q_samples) / np.sum(p_samples / q_samples)
-    return np.sum(w * (p_samples**2))
+    return np.sum(w * (xs**2))
 
 
 k_uniform = 23
@@ -53,7 +52,6 @@ methods = {
         k=k_uniform,
         n_samples=n,
     ),
-    "IS normal": lambda n: importance_sample(scipy.stats.norm.pdf, n_samples=n),
 }
 
 
@@ -86,9 +84,9 @@ def plot_densities():
 
 n_estimates = 10
 data = pd.DataFrame(columns=["proposal", "n_samples", "estimate"])
-for name, sample_method in methods.items():
+for _ in tqdm.trange(n_estimates):
     for n_samples in (10, 100, 1000):
-        for _ in tqdm.trange(n_estimates):
+        for name, sample_method in methods.items():
             samples = sample_method(n_samples)
             estimate = np.mean(samples**2)
             row = pd.DataFrame(
@@ -96,6 +94,15 @@ for name, sample_method in methods.items():
                 index=[0],
             )
             data = pd.concat([data, row], ignore_index=True)
+        row = pd.DataFrame(
+            {
+                "proposal": "IS normal",
+                "n_samples": n_samples,
+                "estimate": importance_sample(scipy.stats.norm, n_samples=n_samples),
+            },
+            index=[0],
+        )
+        data = pd.concat([data, row], ignore_index=True)
 
 actual_mean = np.mean([p_density(x) * x**2 for x in (np.linspace(-3, 3, 10_000))])
 
@@ -111,4 +118,4 @@ print(data.groupby(["proposal", "n_samples"]).mean())
 print(data.groupby(["proposal", "n_samples"]).std())
 print("Actual:", actual_mean)
 
-print("IS: ", importance_sample(scipy.stats.norm.pdf))
+print("IS: ", importance_sample(scipy.stats.norm))
