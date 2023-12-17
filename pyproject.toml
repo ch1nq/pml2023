@@ -6,10 +6,12 @@ authors = ["askepen <aske@vhg26.dk>"]
 readme = "README.md"
 
 [tool.poetry.dependencies]
-python = "^3.11"
+python = "^3.10"
 seaborn = "^0.13.0"
 numpy = "^1.26.2"
 scikit-learn = "^1.3.2"
+pyro-ppl = "^1.8.6"
+arviz = "^0.16.1"
 
 
 [build-system]
