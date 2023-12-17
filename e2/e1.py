@@ -76,7 +76,7 @@ def plot_densities():
     )
     samples = method(10000)
     sns.histplot(samples, stat="density", label="Samples", bins=100, color=palette[4])
-    plt.savefig("e2-reject.png")
+    plt.savefig("figs/e1-reject.png")
     plt.clf()
 
 
@@ -111,7 +111,7 @@ plt.axhline(actual_mean, color="black", linestyle="--", label="Actual")
 plt.xlabel("Number of samples")
 plt.ylabel("$E[x^2]$")
 
-plt.savefig("e2.png")
+plt.savefig("figs/e1.png")
 plt.clf()
 
 print(data.groupby(["proposal", "n_samples"]).mean())
