@@ -3,6 +3,7 @@ import torch
 import torch.utils.data
 from torch import nn, optim
 from torch.nn import functional as F
+from torch.distributions import Beta
 from torchvision import datasets, transforms
 from torchvision.utils import save_image
 import matplotlib.pyplot as plt
@@ -109,5 +110,18 @@ def loss_function(recon_x, x, mu, logvar):
     
     return BCE + KLD
 
-def loss_function_beta(x, recon_x, mu, logvar):
-    raise NotImplementedError
+def map_x_to_distribution(x: torch.Tensor) -> Beta:
+    mean = x[:, 0]
+    shape = x[:, 1]
+    return Beta(concentration0=(1 - mean) * shape, concentration1=mean * shape)
+
+
+def loss_function_beta(recon_x: torch.Tensor, x: torch.Tensor, mu, logvar) -> torch.Tensor:
+    x = x.reshape((-1, 784))
+    eps = 1e-4
+    distribution = map_x_to_distribution(recon_x)
+
+    # clip y_actual to avoid infinite losses
+    loss = -distribution.log_prob(x.clip(eps, 1 - eps))
+
+    return loss
