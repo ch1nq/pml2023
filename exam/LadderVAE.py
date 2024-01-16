@@ -16,25 +16,25 @@ class LadderVAE(nn.Module):
         self.d_1 = nn.Linear(in_features=784, out_features=392) # Deterministic 1
         self.d_2 = nn.Linear(in_features=392, out_features=196) # Deterministic 2
         self.d_1 = nn.Conv2d(in_channels=1,
-                            out_channels=2,
-                            kernel_size=3,
+                            out_channels=4,
+                            kernel_size=4,
                             padding=1,
                             stride=2,
                             groups=1)
-        self.d_2 = nn.Conv2d(in_channels=2,
-                            out_channels=4,
-                            kernel_size=3,
+        self.d_2 = nn.Conv2d(in_channels=4,
+                            out_channels=8,
+                            kernel_size=4,
                             padding=1,
                             stride=2,
                             groups=1)
 
-        self.bup_out1 = nn.Linear(in_features=392, out_features=2) # BottomUp Out 1
-        self.bup_out2 = nn.Linear(in_features=392, out_features=2) # BottomUp Out 2
+        self.bup_out1 = nn.Linear(in_features=784, out_features=2) # BottomUp Out 1
+        self.bup_out2 = nn.Linear(in_features=784, out_features=2) # BottomUp Out 2
 
         # TopDown
-        self.tdown1 = nn.Linear(in_features=2, out_features=196) # TopDown 1
-        self.z_2 = nn.Linear(in_features=196, out_features=392) # Stochastic 2
-        self.z_1 = nn.Linear(in_features=392, out_features=400) # Stochastic 1
+        self.tdown1 = nn.Linear(in_features=2, out_features=392) # TopDown 1
+        self.z_2 = nn.Linear(in_features=392, out_features=784) # Stochastic 2
+        self.z_1 = nn.Linear(in_features=784, out_features=400) # Stochastic 1
 
         self.x_out = nn.Linear(in_features=400, out_features=784) # X i output
 
@@ -45,11 +45,11 @@ class LadderVAE(nn.Module):
         x = x.reshape((bsize, 1, 28, 28))
         d_1 = F.relu(self.d_1(x)) # Conv2d
         #print('d1: ',d_1.shape)
-        z_1 = F.relu(self.z_1(d_1.reshape((bsize, 392))))
+        z_1 = F.relu(self.z_1(d_1.reshape((bsize, 784))))
 
         d_2 = F.relu(self.d_2(d_1))
         #print('d_2: ',d_2.shape)
-        d_2 = d_2.reshape((bsize, 196))
+        d_2 = d_2.reshape((bsize, 392))
 
         z_2 = F.relu(self.z_2(d_2))
         z_1_2 = F.relu(self.z_1(z_2))
@@ -73,7 +73,7 @@ class LadderVAE(nn.Module):
 
         return torch.sigmoid(self.x_out(z_1))
 
-    def forward(self, x): # when we call model(data), it is the same as model.forward(data)
+    def forward(self, x, t=None): # when we call model(data), it is the same as model.forward(data)
         mu, logvar = self.encode(x.view(-1, 784))
         z = self.reparameterize(mu, logvar)
         return self.decode(z), mu, logvar
