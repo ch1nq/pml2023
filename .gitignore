@@ -6,3 +6,5 @@ assignment3/.ipynb_checkpoints/
 exam/.ipynb_checkpoints/
 
 exam/__pycache__/
+
+exam/MNISTDiffusion/__pycache__/

@@ -50,6 +50,22 @@ def test(epoch, model, test_loader, loss_function, batch_size, device, name='VAE
     test_loss /= len(test_loader.dataset)
     print('====> '+name+' Test set loss: {:.4f}'.format(test_loss))
 
+
+def test_mse(model, test_loader, device, name='MSE'):
+    model.eval()
+    test_loss = 0
+    loss_function = nn.MSELoss(reduction='mean')
+    loss_function = nn.functional.mse_loss
+    with torch.no_grad():
+        for i, (data, _) in enumerate(test_loader):
+            data = data.to(device)
+            recon_batch, mu, logvar = model(data)
+            data = data.reshape((-1, 784))
+            test_loss += loss_function(recon_batch, data).item()
+
+    test_loss /= len(test_loader.dataset)
+    print('====> '+name+' Test set loss: {:.4f}'.format(test_loss))
+
 class VAE(nn.Module):
     def __init__(self):
         super(VAE, self).__init__()
