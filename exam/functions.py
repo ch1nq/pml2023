@@ -141,3 +141,13 @@ def loss_function_beta(recon_x: torch.Tensor, x: torch.Tensor, mu, logvar) -> to
     loss = -distribution.log_prob(x.clip(eps, 1 - eps))
 
     return loss
+
+class BetaLoss():
+    def __init__(self, beta):
+        self.beta = beta
+
+    def loss_function(self, recon_x, x, mu, logvar):
+        BCE = F.binary_cross_entropy(recon_x, x.view(-1, 784), reduction='sum')
+        KLD = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
+        
+        return BCE + self.beta * KLD
