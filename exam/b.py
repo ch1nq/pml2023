@@ -54,7 +54,7 @@ def model(X, y=None) -> pyro.contrib.gp.models.GPRegression:
         pyro.contrib.gp.kernels.Periodic(input_dim=1, period=period),
         pyro.contrib.gp.kernels.RBF(input_dim=1, lengthscale=lengthscale),
     )
-    return pyro.contrib.gp.models.GPRegression(X, y, kernel, noise=torch.tensor(0.01))
+    return pyro.contrib.gp.models.GPRegression(X, y, kernel, noise=torch.tensor(0.01), jitter=1e-3)
 
 
 def plot_gp(gp, name):
@@ -130,8 +130,8 @@ def task3(X, y, X_test, y_test):
         pyro.contrib.gp.kernels.Periodic(input_dim=1, period=period),
         pyro.contrib.gp.kernels.RBF(input_dim=1, lengthscale=lengthscale),
     )
-    gp = pyro.contrib.gp.models.GPRegression(X, y, kernel, noise=torch.tensor(0.01), jitter=1e-3)
-    # plot_gp(gp, "Task 3")
+    gp = pyro.contrib.gp.models.GPRegression(X, y, kernel, noise=torch.tensor(0.01))
+    plot_gp(gp, "Task 3")
 
     # Compute the posterior log-likelihood of the test set
     log_likelihoods = compute_log_likelihood(posterior_samples, X_test, y_test)
