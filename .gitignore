@@ -8,3 +8,5 @@ exam/.ipynb_checkpoints/
 exam/__pycache__/
 
 exam/MNISTDiffusion/__pycache__/
+
+exam/MNISTDiffusion/.ipynb_checkpoints/
