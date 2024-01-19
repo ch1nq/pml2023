@@ -62,7 +62,7 @@ def model(X, y=None) -> pyro.contrib.gp.models.GPRegression:
 
 def plot_gp(gp, name):
     Xnew = torch.linspace(0.01, 1, 100)
-    means, covs = gp(Xnew, full_cov=True)
+    means, covs = gp(Xnew, full_cov=True, noiseless=False)
     means = means.detach().numpy()
     covs = covs.detach()
     sd = covs.detach().diag().sqrt().numpy()
@@ -81,7 +81,7 @@ def plot_gp(gp, name):
 def evaluate(gp: pyro.contrib.gp.models.GPRegression, X_test, y_test):
     gp.eval()
     # evaluate the posterior log-likelihood of the test set on the fitted GP using θ
-    means, covs = gp(X_test, full_cov=True)
+    means, covs = gp(X_test, full_cov=True, noiseless=False)
     log_likelihood = dist.MultivariateNormal(means, covs).log_prob(y_test)
     return log_likelihood
 
@@ -173,9 +173,8 @@ if __name__ == "__main__":
 
 
 # %%
-
-# plt.bar("Gradient descent", np.sum(likelihoods_gd))
-plt.bar("MCMC", np.sum(likelihoods_mcmc))
-plt.show()
+np.mean(likelihoods_mcmc), np.std(likelihoods_mcmc)
+# %%
+np.mean(likelihoods_gd), np.std(likelihoods_gd)
 
 # %%
