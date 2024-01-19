@@ -54,7 +54,7 @@ def get_kernel(l, v, p):
 # (or use the GP implemented in Pyro) as well as a function implementing log p(y, θ|X).
 def model(X, y=None) -> pyro.contrib.gp.models.GPRegression:
     lengthscale = pyro.sample("lengthscale", dist.Normal(3.0, 1.0))
-    variance = pyro.sample("variance", dist.Uniform(10.1, 11.0))
+    variance = pyro.sample("variance", dist.Uniform(0.5, 5.0))
     period = pyro.sample("period", dist.Normal(3.0, 1.0))
     kernel = get_kernel(lengthscale, variance, period)
     return pyro.contrib.gp.models.GPRegression(X, y, kernel, noise=torch.tensor(0.01))
