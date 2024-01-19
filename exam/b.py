@@ -34,8 +34,13 @@ def g(x):
 
 def get_data():
     X, y = sample_data_from(g)
-    X, X_test, y, y_test = sklearn.model_selection.train_test_split(X, y, test_size=10, random_state=1337)
     
+    # print("X1",X)
+    X, X_test, y, y_test = sklearn.model_selection.train_test_split(X, y, test_size=10, random_state=1337)
+    # print("X",X)
+    # print("X_test",X_test)
+    # print("y",y)
+    # print("y_test",y_test)
     # Print the shapes
     # print("X shape:", X.shape)
     # print("X_test shape:", X_test.shape)
@@ -58,8 +63,8 @@ pyro.clear_param_store()
 # For each parameter, pick a suitable prior distribution and implement the model
 # (or use the GP implemented in Pyro) as well as a function implementing log p(y, θ|X).
 def model(X, y=None) -> pyro.contrib.gp.models.GPRegression:
-    period = pyro.sample("period", dist.Uniform(0.3, 2))
-    lengthscale = pyro.sample("lengthscale", dist.Normal(0.5, 10))
+    period = pyro.sample("period", dist.Uniform(0.01, 0.1667))
+    lengthscale = pyro.sample("lengthscale", dist.Normal(0, 1))
     # print("Sampled period:", period.item())
     # print("Sampled lengthscale:", lengthscale.item())
     kernel = pyro.contrib.gp.kernels.Sum(
@@ -69,11 +74,12 @@ def model(X, y=None) -> pyro.contrib.gp.models.GPRegression:
     # cov_matrix = kernel(X).detach().numpy()
     # print("Covariance matrix:\n", cov_matrix)
     # print()
-    return pyro.contrib.gp.models.GPRegression(X, y, kernel, noise=torch.tensor(0.01), jitter=1e-6)
+    # noise=torch.tensor(0.01)
+    return pyro.contrib.gp.models.GPRegression(X, y, kernel, jitter=1e-6)
 
 
 def plot_gp(gp, name):
-    Xnew = torch.linspace(0.01, 1, 100)
+    Xnew = torch.linspace(0, 1, 100)
     means, covs = gp(Xnew, full_cov=True)
     means = means.detach().numpy()
     covs = covs.detach()
@@ -97,12 +103,15 @@ def evaluate(gp: pyro.contrib.gp.models.GPRegression, X_test, y_test):
     # print("Before calling gp" , X_test.shape)
     
     means, covs = gp(X_test, full_cov=True)
-    
+    # print("HEJ")
+    # print(covs)
+    # print("HEJ22")
     # Add a print statement after calling gp
     # print("After calling gp")
     
     log_likelihood = dist.MultivariateNormal(means, covs).log_prob(y_test)
     return log_likelihood
+
 
 
 
@@ -140,17 +149,42 @@ def task2(X, y, X_test, y_test):
 
 
 
+# def compute_log_likelihood(posterior_samples, X_test, y_test):
+#     likelihoods = []
+#     for lengthscale, period in zip(posterior_samples["lengthscale"], posterior_samples["period"]):
+#         with pyro.plate("data"):
+#             kernel = pyro.contrib.gp.kernels.Sum(
+#                 pyro.contrib.gp.kernels.Periodic(input_dim=1, period=period),
+#                 pyro.contrib.gp.kernels.RBF(input_dim=1, lengthscale=lengthscale),
+#             )
+#             gp = pyro.contrib.gp.models.GPRegression(X, y, kernel, noise=torch.tensor(0.01))
+#             likelihoods.append(evaluate(gp, X_test, y_test).item())
+#     return torch.tensor(likelihoods)
 def compute_log_likelihood(posterior_samples, X_test, y_test):
     likelihoods = []
     for lengthscale, period in zip(posterior_samples["lengthscale"], posterior_samples["period"]):
-        with pyro.plate("data"):
-            kernel = pyro.contrib.gp.kernels.Sum(
-                pyro.contrib.gp.kernels.Periodic(input_dim=1, period=period),
-                pyro.contrib.gp.kernels.RBF(input_dim=1, lengthscale=lengthscale),
-            )
-            gp = pyro.contrib.gp.models.GPRegression(X, y, kernel, noise=torch.tensor(0.01))
-            likelihoods.append(evaluate(gp, X_test, y_test).item())
+        kernel = pyro.contrib.gp.kernels.Sum(
+            pyro.contrib.gp.kernels.Periodic(input_dim=1, period=period),
+            pyro.contrib.gp.kernels.RBF(input_dim=1, lengthscale=lengthscale),
+        )
+        gp = pyro.contrib.gp.models.GPRegression(X, y, kernel)
+
+        means, covs = gp(X_test, full_cov=True)
+        # jitter = 1e-6  # You might need to adjust this value
+        # covs = covs + torch.eye(covs.size(0)) * jitter
+
+        log_likelihood = dist.MultivariateNormal(means, covs).log_prob(y_test)
+
+        # Diagnostic prints
+        # print("Lengthscale:", lengthscale)
+        # print("Period:", period)
+        # print("Means:", means)
+        # print("Covariance Matrix:", covs)
+        # print("Log Likelihood:", log_likelihood.item())
+
+        likelihoods.append(log_likelihood.item())
     return torch.tensor(likelihoods)
+
 
 
 def task3(X, y, X_test, y_test):
@@ -160,7 +194,7 @@ def task3(X, y, X_test, y_test):
     # hyperparameters of the sampling (such as the number of warmup samples).
 
     nuts_kernel = pyro.infer.NUTS(model)  
-    mcmc = pyro.infer.MCMC(nuts_kernel, num_samples=100, num_chains=2, warmup_steps=300)
+    mcmc = pyro.infer.MCMC(nuts_kernel, num_samples=200, num_chains=2, warmup_steps=400)
     mcmc.run(X, y)
     posterior_samples = az.from_pyro(mcmc)
     az.ess(posterior_samples)
@@ -178,18 +212,22 @@ def task3(X, y, X_test, y_test):
     # Plot the posterior mean and variance of the GP
     lengthscale = posterior_samples["lengthscale"].mean()
     period = posterior_samples["period"].mean()
+    print(lengthscale)
+    print(period)
     kernel = pyro.contrib.gp.kernels.Sum(
         pyro.contrib.gp.kernels.Periodic(input_dim=1, period=period),
         pyro.contrib.gp.kernels.RBF(input_dim=1, lengthscale=lengthscale),
     )
     gp = pyro.contrib.gp.models.GPRegression(X, y, kernel, noise=torch.tensor(0.01))
     plot_gp(gp, "GP Regression")
-
+    # print("HEJ")
+    # print(posterior_samples)
     # Compute the posterior log-likelihood of the test set
     log_likelihoods = compute_log_likelihood(posterior_samples, X_test, y_test)
-    print(log_likelihoods.shape)
-    print(torch.mean(log_likelihoods))
-    print(torch.std(log_likelihoods))
+    print(log_likelihoods)
+    # print(log_likelihoods.shape)
+    # print(torch.mean(log_likelihoods))
+    # print(torch.std(log_likelihoods))
     
     
 def task4(X, y, X_test, y_test):
@@ -251,8 +289,8 @@ def task5():
 if __name__ == "__main__":
     X, X_test, y, y_test = get_data()
     task3(X, y, X_test, y_test)
-    task2(X, y, X_test, y_test)
-    task4(X, y, X_test, y_test)
+    # task2(X, y, X_test, y_test)
+    # task4(X, y, X_test, y_test)
     # task5()
 
 
