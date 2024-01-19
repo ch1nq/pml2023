@@ -116,28 +116,29 @@ def loss_function_continuous(recon_x, x, mu, logvar):
     return BCE + KLD - compute_log_C(recon_x)
 
 def loss_function(recon_x, x, mu, logvar):
-    #print(recon_x.shape)
-    #print(x.shape)
-    #print(mu.shape)
-    #print(logvar.shape)
-
     BCE = F.binary_cross_entropy(recon_x, x.view(-1, 784), reduction='sum')
     KLD = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
     
-    return BCE + KLD
-
-def map_x_to_distribution(x: torch.Tensor) -> Beta:
-    mean = x[:, 0]
-    shape = x[:, 1]
-    return Beta(concentration0=(1 - mean) * shape, concentration1=mean * shape)
-
+    loss = BCE + KLD
+    return loss
 
 def loss_function_beta(recon_x: torch.Tensor, x: torch.Tensor, mu, logvar) -> torch.Tensor:
     x = x.reshape((-1, 784))
     eps = 1e-4
-    distribution = map_x_to_distribution(recon_x)
+    distribution = Beta(concentration0=(1 - recon_x), concentration1=recon_x)
 
     # clip y_actual to avoid infinite losses
-    loss = -distribution.log_prob(x.clip(eps, 1 - eps))
+    loss = -distribution.log_prob(x.clip(eps, 1 - eps)).sum()
+    KLD = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
 
-    return loss
+    return loss + KLD
+
+class BetaLoss():
+    def __init__(self, beta):
+        self.beta = beta
+
+    def loss_function(self, recon_x, x, mu, logvar):
+        BCE = F.binary_cross_entropy(recon_x, x.view(-1, 784), reduction='sum')
+        KLD = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
+        
+        return BCE + self.beta * KLD
