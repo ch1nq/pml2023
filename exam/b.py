@@ -12,7 +12,7 @@ import pyro.optim as optim
 from pyro.infer import SVI, Trace_ELBO
 from pyro.contrib.autoguide import AutoDelta
 sns.set_style("whitegrid")
-torch.random.manual_seed(1337)
+# torch.random.manual_seed(1337)
 
 # %%
 
@@ -78,6 +78,26 @@ def model(X, y=None) -> pyro.contrib.gp.models.GPRegression:
     return pyro.contrib.gp.models.GPRegression(X, y, kernel, jitter=1e-6)
 
 
+
+
+# def model(X, y=None) -> pyro.contrib.gp.models.GPRegression:
+#     # Adjusting the range for the period to be centered around 1/6
+#     period = pyro.sample("period", dist.Uniform(0.1, 0.2))  # Example range
+
+#     # Using a LogNormal distribution for the lengthscale
+#     lengthscale = pyro.sample("lengthscale", dist.Normal(0, 1))
+#     lengthscale = torch.exp(lengthscale)  # Ensuring lengthscale is positive
+
+#     # Define the kernel
+#     kernel = pyro.contrib.gp.kernels.Sum(
+#         pyro.contrib.gp.kernels.Periodic(input_dim=1, period=period),
+#         pyro.contrib.gp.kernels.RBF(input_dim=1, lengthscale=lengthscale),
+#     )
+    
+#     # Define the GP model
+#     return pyro.contrib.gp.models.GPRegression(X, y, kernel, noise=torch.tensor(0.01))
+
+
 def plot_gp(gp, name):
     Xnew = torch.linspace(0, 1, 100)
     means, covs = gp(Xnew, full_cov=True)
@@ -98,19 +118,7 @@ def plot_gp(gp, name):
     plt.savefig("Task3", dpi=300)
     plt.show()
 
-def evaluate(gp: pyro.contrib.gp.models.GPRegression, X_test, y_test):
-    # Add a print statement before calling gp
-    # print("Before calling gp" , X_test.shape)
-    
-    means, covs = gp(X_test, full_cov=True)
-    # print("HEJ")
-    # print(covs)
-    # print("HEJ22")
-    # Add a print statement after calling gp
-    # print("After calling gp")
-    
-    log_likelihood = dist.MultivariateNormal(means, covs).log_prob(y_test)
-    return log_likelihood
+
 
 
 
@@ -119,33 +127,85 @@ def evaluate(gp: pyro.contrib.gp.models.GPRegression, X_test, y_test):
 
 import pyro
 
+# def task2(X, y, X_test, y_test):
+    
+#     pyro.clear_param_store()
+#     # Use SVI to fit the model to the training data
+#     gp = model(X, y)
+#     losses = pyro.contrib.gp.util.train(gp, num_steps=1000)
+    
+#     # Plot the loss
+#     plt.figure(figsize=(10, 5))  # Optional: Define the size of the figure
+#     sns.lineplot(x=range(len(losses)), y=losses)
+#     plt.title('Training Loss Over Time')  # Add a title to the plot
+#     plt.xlabel('Iteration')  # Label for the x-axis
+#     plt.ylabel('Loss')  # Label for the y-axis
+#     plt.savefig("Task2.png", dpi=300)  # Save the plot with high resolution
+#     plt.show()  # Display the plot
+    
+#     # Access the learned parameters (theta*) from the GP model
+#     theta_star = {name: pyro.param(name).detach().cpu().numpy() 
+#                   for name in pyro.get_param_store().keys()}
+#     print("Learned Parameters (theta*):", theta_star)
+    
+#     # Evaluate the posterior log-likelihood of the test set on the fitted GP using θ*
+#     posterior_log_likelihood = evaluate(gp, X_test, y_test).item()
+#     print("Posterior log-likelihood of the test set:", posterior_log_likelihood)
+    
+#     return theta_star, posterior_log_likelihood
+
 def task2(X, y, X_test, y_test):
     
     pyro.clear_param_store()
-    # Use SVI to fit the model to the training data
-    gp = model(X, y)
-    losses = pyro.contrib.gp.util.train(gp, num_steps=1000)
     
+    # Define the guide for MAP estimation
+    def guide(X, y):
+        # Point estimates for hyperparameters
+        pyro.param("period_map", torch.tensor(0.1), constraint=dist.constraints.interval(0.01, 0.1667))
+        pyro.param("lengthscale_map", torch.tensor(1.0), constraint=dist.constraints.positive)
+        pyro.sample("period", dist.Delta(pyro.param("period_map")))
+        pyro.sample("lengthscale", dist.Delta(pyro.param("lengthscale_map")))
+
+    # Setup the SVI object
+    svi = pyro.infer.SVI(model=model,
+                         guide=guide,
+                         optim=pyro.optim.Adam({"lr": 0.01}),
+                         loss=pyro.infer.Trace_ELBO())
+
+    # Optimization loop
+    losses = []
+    for step in range(1000):
+        loss = svi.step(X, y)
+        losses.append(loss)
+
     # Plot the loss
-    plt.figure(figsize=(10, 5))  # Optional: Define the size of the figure
+    plt.figure(figsize=(10, 5))
     sns.lineplot(x=range(len(losses)), y=losses)
-    plt.title('Training Loss Over Time')  # Add a title to the plot
-    plt.xlabel('Iteration')  # Label for the x-axis
-    plt.ylabel('Loss')  # Label for the y-axis
-    plt.savefig("Task2.png", dpi=300)  # Save the plot with high resolution
-    plt.show()  # Display the plot
-    
+    plt.title('Training Loss Over Time')
+    plt.xlabel('Iteration')
+    plt.ylabel('Loss')
+    plt.savefig("Task2.png", dpi=300)
+    plt.show()
+
     # Access the learned parameters (theta*) from the GP model
-    theta_star = {name: pyro.param(name).detach().cpu().numpy() 
-                  for name in pyro.get_param_store().keys()}
-    print("Learned Parameters (theta*):", theta_star)
+    theta_star = {
+    "period_map": pyro.param("period_map"),
+    "lengthscale_map": pyro.param("lengthscale_map")
+    }
+    print("Learned Parameters (theta*):", {k: v.item() for k, v in theta_star.items()})
     
     # Evaluate the posterior log-likelihood of the test set on the fitted GP using θ*
+    # Create the GP model using the MAP estimates
+    print(theta_star["period_map"])
+    print(["lengthscale_map"])
+    kernel = pyro.contrib.gp.kernels.Sum(
+        pyro.contrib.gp.kernels.Periodic(input_dim=1, period=theta_star["period_map"]),
+        pyro.contrib.gp.kernels.RBF(input_dim=1, lengthscale=theta_star["lengthscale_map"]),    )
+    gp = pyro.contrib.gp.models.GPRegression(X, y, kernel, noise=torch.tensor(0.01))
     posterior_log_likelihood = evaluate(gp, X_test, y_test).item()
     print("Posterior log-likelihood of the test set:", posterior_log_likelihood)
     
     return theta_star, posterior_log_likelihood
-
 
 
 
@@ -160,32 +220,62 @@ def task2(X, y, X_test, y_test):
 #             gp = pyro.contrib.gp.models.GPRegression(X, y, kernel, noise=torch.tensor(0.01))
 #             likelihoods.append(evaluate(gp, X_test, y_test).item())
 #     return torch.tensor(likelihoods)
+# def compute_log_likelihood(posterior_samples, X_test, y_test):
+#     likelihoods = []
+#     for lengthscale, period in zip(posterior_samples["lengthscale"], posterior_samples["period"]):
+#         kernel = pyro.contrib.gp.kernels.Sum(
+#             pyro.contrib.gp.kernels.Periodic(input_dim=1, period=period),
+#             pyro.contrib.gp.kernels.RBF(input_dim=1, lengthscale=lengthscale),
+#         )
+#         gp = pyro.contrib.gp.models.GPRegression(X, y, kernel)
+
+#         means, covs = gp(X_test, full_cov=True)
+#         # jitter = 1e-6  # You might need to adjust this value
+#         # covs = covs + torch.eye(covs.size(0)) * jitter
+
+#         log_likelihood = dist.MultivariateNormal(means, covs).log_prob(y_test)
+
+#         # Diagnostic prints
+#         # print("Lengthscale:", lengthscale)
+#         # print("Period:", period)
+#         # print("Means:", means)
+#         # print("Covariance Matrix:", covs)
+#         # print("Log Likelihood:", log_likelihood.item())
+
+#         likelihoods.append(log_likelihood.item())
+#     return torch.tensor(likelihoods)
+
 def compute_log_likelihood(posterior_samples, X_test, y_test):
     likelihoods = []
     for lengthscale, period in zip(posterior_samples["lengthscale"], posterior_samples["period"]):
-        kernel = pyro.contrib.gp.kernels.Sum(
-            pyro.contrib.gp.kernels.Periodic(input_dim=1, period=period),
-            pyro.contrib.gp.kernels.RBF(input_dim=1, lengthscale=lengthscale),
-        )
-        gp = pyro.contrib.gp.models.GPRegression(X, y, kernel)
-
-        means, covs = gp(X_test, full_cov=True)
-        # jitter = 1e-6  # You might need to adjust this value
-        # covs = covs + torch.eye(covs.size(0)) * jitter
-
-        log_likelihood = dist.MultivariateNormal(means, covs).log_prob(y_test)
-
-        # Diagnostic prints
-        # print("Lengthscale:", lengthscale)
-        # print("Period:", period)
-        # print("Means:", means)
-        # print("Covariance Matrix:", covs)
-        # print("Log Likelihood:", log_likelihood.item())
-
-        likelihoods.append(log_likelihood.item())
+        with pyro.plate("data"):
+            kernel = pyro.contrib.gp.kernels.Sum(
+                pyro.contrib.gp.kernels.Periodic(input_dim=1, period=period),
+                pyro.contrib.gp.kernels.RBF(input_dim=1, lengthscale=lengthscale),
+            )
+            gp = pyro.contrib.gp.models.GPRegression(X, y, kernel, noise=torch.tensor(0.01))
+            
+            likelihoods.append(evaluate(gp, X_test, y_test).item())
     return torch.tensor(likelihoods)
 
 
+
+
+
+
+def evaluate(gp: pyro.contrib.gp.models.GPRegression, X_test, y_test):
+    # Add a print statement before calling gp
+    # print("Before calling gp" , X_test.shape)
+    
+    means, covs = gp(X_test, full_cov=True)
+    # print("HEJ")
+    # print(covs)
+    # print("HEJ22")
+    # Add a print statement after calling gp
+    # print("After calling gp")
+    
+    log_likelihood = dist.MultivariateNormal(means, covs).log_prob(y_test)
+    return log_likelihood
 
 def task3(X, y, X_test, y_test):
     pyro.clear_param_store()
@@ -212,8 +302,8 @@ def task3(X, y, X_test, y_test):
     # Plot the posterior mean and variance of the GP
     lengthscale = posterior_samples["lengthscale"].mean()
     period = posterior_samples["period"].mean()
-    print(lengthscale)
-    print(period)
+    # print(lengthscale)
+    # print(period)
     kernel = pyro.contrib.gp.kernels.Sum(
         pyro.contrib.gp.kernels.Periodic(input_dim=1, period=period),
         pyro.contrib.gp.kernels.RBF(input_dim=1, lengthscale=lengthscale),
@@ -223,6 +313,8 @@ def task3(X, y, X_test, y_test):
     # print("HEJ")
     # print(posterior_samples)
     # Compute the posterior log-likelihood of the test set
+    # print("Posterior samples",posterior_samples)
+    # print(y_test)
     log_likelihoods = compute_log_likelihood(posterior_samples, X_test, y_test)
     print(log_likelihoods)
     # print(log_likelihoods.shape)
@@ -237,12 +329,16 @@ def task4(X, y, X_test, y_test):
     nuts_kernel = pyro.infer.NUTS(model)
     
     # Use MCMC to sample 500 values of θ (hyperparameters) from the posterior
-    mcmc = pyro.infer.MCMC(nuts_kernel, num_samples=500, num_chains=1, warmup_steps=300)
+    mcmc = pyro.infer.MCMC(nuts_kernel, num_samples=500, num_chains=2, warmup_steps=400)
     mcmc.run(X, y)
     
     # Extract the samples from MCMC
     posterior_samples = mcmc.get_samples()
-    
+    print("X_test",X_test)
+    print("X",X)
+    print("y",y)
+    print("y_test",y_test)
+    print("posterior_samples",posterior_samples)
     # Compute the posterior log-likelihood for each sample
     log_likelihoods = compute_log_likelihood(posterior_samples, X_test, y_test)
     
@@ -261,7 +357,7 @@ def task5():
     mcmc_likelihoods = []
 
     # Perform 20 iterations for different datasets
-    for _ in range(20):
+    for _ in range(1):
         # Generate a new dataset
         X, X_test, y, y_test = get_data()
 
@@ -285,11 +381,11 @@ def task5():
     # print("MAP Likelihoods Std Deviation:", map_std)
     print("MCMC Likelihoods Mean:", mcmc_mean)
     print("MCMC Likelihoods Std Deviation:", mcmc_std)
-    
+    print("MCMC likelihoods",mcmc_likelihoods)
 if __name__ == "__main__":
     X, X_test, y, y_test = get_data()
     task3(X, y, X_test, y_test)
-    # task2(X, y, X_test, y_test)
+    task2(X, y, X_test, y_test)
     # task4(X, y, X_test, y_test)
     # task5()
 
