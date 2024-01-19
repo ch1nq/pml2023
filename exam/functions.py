@@ -66,6 +66,19 @@ def test_mse(model, test_loader, device, name='MSE'):
     test_loss /= len(test_loader.dataset)
     print('====> '+name+' Test set loss: {:.4f}'.format(test_loss))
 
+def test_bce(model, test_loader, device, name='MSE'):
+    model.eval()
+    test_loss = 0
+    with torch.no_grad():
+        for i, (data, _) in enumerate(test_loader):
+            data = data.to(device)
+            recon_batch, mu, logvar = model(data)
+            data = data.reshape((-1, 784))
+            test_loss += F.binary_cross_entropy(recon_batch, data, reduction='mean')
+
+    test_loss /= len(test_loader.dataset)
+    print('====> '+name+' Test set loss: {:.4f}'.format(test_loss))
+
 class VAE(nn.Module):
     def __init__(self):
         super(VAE, self).__init__()
@@ -127,7 +140,6 @@ def loss_function_beta(recon_x: torch.Tensor, x: torch.Tensor, mu, logvar) -> to
     eps = 1e-4
     distribution = Beta(concentration0=(1 - recon_x), concentration1=recon_x)
 
-    # clip y_actual to avoid infinite losses
     loss = -distribution.log_prob(x.clip(eps, 1 - eps)).sum()
     KLD = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
 
